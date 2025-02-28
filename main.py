@@ -1,6 +1,7 @@
 import pygame
 import sys
 from screens.title_screen import TitleScreen
+from screens.game_screen import GameScreen
 
 # Initialize Pygame
 pygame.init()
@@ -25,12 +26,15 @@ class GameState:
         self.screen = screen
         self.state = "title"
         self.title_screen = TitleScreen(screen)
+        self.game_screen = None  # Initialize when needed
 
     def run(self):
         while True:
             if self.state == "title":
                 self.run_title_screen()
             elif self.state == "game":
+                if self.game_screen is None:
+                    self.game_screen = GameScreen(screen)
                 self.run_game()
 
     def run_title_screen(self):
@@ -38,13 +42,11 @@ class GameState:
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    sys.exit()
             
             # Handle title screen events
-            self.state = self.title_screen.handle_event(event)
+            new_state = self.title_screen.handle_event(event)
+            if new_state != self.state:
+                self.state = new_state
 
         # Draw title screen
         self.title_screen.draw()
@@ -52,20 +54,23 @@ class GameState:
         clock.tick(60)
 
     def run_game(self):
-        # Clear the screen
-        screen.fill(GREEN)
-        
         # Handle game events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.state = "title"
+            
+            # Handle game screen events
+            new_state = self.game_screen.handle_event(event)
+            if new_state != self.state:
+                self.state = new_state
+                return
+
+        # Update game state
+        self.game_screen.update()
         
-        # Update the display
-        pygame.display.flip()
+        # Draw game screen
+        self.game_screen.draw()
         clock.tick(60)
 
 def main():
