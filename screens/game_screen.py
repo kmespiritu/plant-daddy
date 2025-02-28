@@ -1,6 +1,7 @@
 import pygame
 from game.world import World
 from game.player import Player
+from game.ui import ToolBar, StatusPanel
 
 class GameScreen:
     def __init__(self, screen):
@@ -20,6 +21,13 @@ class GameScreen:
         # Camera position
         self.camera_x = 0
         self.camera_y = 0
+        
+        # UI elements
+        self.toolbar = ToolBar(self.width, self.height)
+        self.status_panel = StatusPanel(self.width)
+        
+        # Game clock for time tracking
+        self.last_update = pygame.time.get_ticks()
 
     def update_camera(self):
         # Center the camera on the player
@@ -42,12 +50,21 @@ class GameScreen:
             if event.key == pygame.K_ESCAPE:
                 return "title"
         
+        # Handle toolbar events
+        if self.toolbar.handle_event(event):
+            self.player.set_active_tool(self.toolbar.get_selected_tool())
+        
         self.player.handle_action(event)
         return "game"
 
     def update(self):
+        current_time = pygame.time.get_ticks()
+        dt = current_time - self.last_update
+        self.last_update = current_time
+        
         self.player.update()
         self.update_camera()
+        self.status_panel.update(dt)
 
     def draw(self):
         # Clear screen
@@ -59,6 +76,8 @@ class GameScreen:
         # Draw player
         self.player.draw(self.screen, int(self.camera_x), int(self.camera_y))
         
-        # Draw UI elements here later
+        # Draw UI elements
+        self.toolbar.draw(self.screen)
+        self.status_panel.draw(self.screen)
         
         pygame.display.flip() 

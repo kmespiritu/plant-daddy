@@ -1,4 +1,5 @@
 import pygame
+from game.ui import Tool
 
 class Player:
     def __init__(self, x, y, world):
@@ -21,7 +22,7 @@ class Player:
         
         # Tools and interaction
         self.facing = 'down'  # down, up, left, right
-        self.active_tool = None
+        self.active_tool = Tool.HOE
 
     def update(self):
         current_time = pygame.time.get_ticks()
@@ -65,6 +66,9 @@ class Player:
         elif self.screen_y > self.target_y:
             self.screen_y = max(self.screen_y - move_speed, self.target_y)
 
+    def set_active_tool(self, tool):
+        self.active_tool = tool
+
     def handle_action(self, event):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
@@ -84,10 +88,13 @@ class Player:
             target_x += 1
             
         tile = self.world.get_tile(target_x, target_y)
-        if tile == self.world.Tile.SOIL:
+        
+        # Use the active tool
+        if self.active_tool == Tool.HOE and tile == self.world.Tile.SOIL:
             self.world.set_tile(target_x, target_y, self.world.Tile.TILLED_SOIL)
-        elif tile == self.world.Tile.TILLED_SOIL:
+        elif self.active_tool == Tool.WATER and tile == self.world.Tile.TILLED_SOIL:
             self.world.set_tile(target_x, target_y, self.world.Tile.WATERED_SOIL)
+        # Add more tool interactions here later
 
     def draw(self, screen, camera_x=0, camera_y=0):
         # Draw the player as a circle for now
