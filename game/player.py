@@ -1,120 +1,157 @@
 import pygame
+from game.items import Items, ItemStack
 from game.ui import Tool
+from game.sprites import CharacterSprite
 
 class Player:
     def __init__(self, x, y, world):
-        self.grid_x = x
-        self.grid_y = y
+        self.x = x
+        self.y = y
         self.world = world
-        self.move_speed = 5  # Grid cells per second
-        self.last_move = 0
-        self.move_cooldown = 200  # milliseconds
+        self.speed = 200  # pixels per second
+        self.selected_tool = Tool.HOE
+        self.inventory = []
+        self.facing = 'down'  # can be 'up', 'down', 'left', 'right'
         
-        # Movement animation
-        self.screen_x = x * world.tile_size
-        self.screen_y = y * world.tile_size
-        self.target_x = self.screen_x
-        self.target_y = self.screen_y
+        # Initialize sprite
+        self.sprite = CharacterSprite(scale=1.5)  # Scale up for better visibility
+        self.last_movement = pygame.time.get_ticks()
+        self.is_moving = False
+        self.is_using_tool = False
+        self.tool_start_time = 0
+        self.tool_duration = 600  # milliseconds for tool animation
         
-        # Player appearance
-        self.color = (255, 0, 0)  # Red for now, will be replaced with sprite
-        self.size = int(world.tile_size * 0.8)  # Slightly smaller than tile
-        
-        # Tools and interaction
-        self.facing = 'down'  # down, up, left, right
-        self.active_tool = Tool.HOE
+        # Add some starting items
+        self.inventory.append(ItemStack(Items.CARROT_SEEDS, 5))
+        self.inventory.append(ItemStack(Items.TOMATO_SEEDS, 5))
+        self.inventory.append(ItemStack(Items.POTATO_SEEDS, 5))
 
-    def update(self):
+    def update(self, dt, keys):
         current_time = pygame.time.get_ticks()
-        keys = pygame.key.get_pressed()
         
-        # Only allow movement if we've reached our target position
-        if self.screen_x == self.target_x and self.screen_y == self.target_y:
-            if current_time - self.last_move >= self.move_cooldown:
-                new_x, new_y = self.grid_x, self.grid_y
+        # Only allow movement if not using a tool
+        if not self.is_using_tool:
+            # Handle movement
+            dx = dy = 0
+            if keys[pygame.K_w]:
+                dy = -1
+                self.facing = 'up'
+            if keys[pygame.K_s]:
+                dy = 1
+                self.facing = 'down'
+            if keys[pygame.K_a]:
+                dx = -1
+                self.facing = 'left'
+            if keys[pygame.K_d]:
+                dx = 1
+                self.facing = 'right'
+
+            # Normalize diagonal movement
+            if dx != 0 and dy != 0:
+                dx *= 0.7071
+                dy *= 0.7071
+
+            # Calculate new position
+            new_x = self.x + dx * self.speed * dt / 1000
+            new_y = self.y + dy * self.speed * dt / 1000
+
+            # Get grid coordinates for new position
+            grid_x = int(new_x / self.world.tile_size)
+            grid_y = int(new_y / self.world.tile_size)
+
+            # Check if new position is walkable
+            if self.world.is_walkable(grid_x, grid_y):
+                self.x = new_x
+                self.y = new_y
                 
-                # Handle movement input
-                if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-                    new_x -= 1
-                    self.facing = 'left'
-                elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-                    new_x += 1
-                    self.facing = 'right'
-                elif keys[pygame.K_UP] or keys[pygame.K_w]:
-                    new_y -= 1
-                    self.facing = 'up'
-                elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
-                    new_y += 1
-                    self.facing = 'down'
-                
-                # Check if the new position is valid
-                if self.world.is_walkable(new_x, new_y):
-                    self.grid_x, self.grid_y = new_x, new_y
-                    self.target_x = new_x * self.world.tile_size
-                    self.target_y = new_y * self.world.tile_size
-                    self.last_move = current_time
+            # Update sprite state based on movement
+            self.is_moving = dx != 0 or dy != 0
+            if self.is_moving:
+                self.sprite.set_state('walk', self.facing)
+            else:
+                self.sprite.set_state('idle', self.facing)
         
-        # Smooth movement animation
-        move_speed = 5
-        if self.screen_x < self.target_x:
-            self.screen_x = min(self.screen_x + move_speed, self.target_x)
-        elif self.screen_x > self.target_x:
-            self.screen_x = max(self.screen_x - move_speed, self.target_x)
-            
-        if self.screen_y < self.target_y:
-            self.screen_y = min(self.screen_y + move_speed, self.target_y)
-        elif self.screen_y > self.target_y:
-            self.screen_y = max(self.screen_y - move_speed, self.target_y)
+        # Update tool animation
+        if self.is_using_tool:
+            if current_time - self.tool_start_time >= self.tool_duration:
+                self.is_using_tool = False
+                self.sprite.set_state('idle', self.facing)
 
-    def set_active_tool(self, tool):
-        self.active_tool = tool
-
-    def handle_action(self, event):
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                self.interact()
-
-    def interact(self):
-        # Get the tile in front of the player
-        target_x, target_y = self.grid_x, self.grid_y
+    def get_target_tile(self):
+        # Get the tile in front of the player based on facing direction
+        grid_x = int(self.x / self.world.tile_size)
+        grid_y = int(self.y / self.world.tile_size)
         
         if self.facing == 'up':
-            target_y -= 1
+            grid_y -= 1
         elif self.facing == 'down':
-            target_y += 1
+            grid_y += 1
         elif self.facing == 'left':
-            target_x -= 1
+            grid_x -= 1
         elif self.facing == 'right':
-            target_x += 1
+            grid_x += 1
             
-        tile = self.world.get_tile(target_x, target_y)
+        return grid_x, grid_y
+
+    def use_tool(self):
+        if self.is_using_tool:
+            return False
+            
+        grid_x, grid_y = self.get_target_tile()
+        tile = self.world.get_tile(grid_x, grid_y)
         
-        # Use the active tool
-        if self.active_tool == Tool.HOE and tile == self.world.Tile.SOIL:
-            self.world.set_tile(target_x, target_y, self.world.Tile.TILLED_SOIL)
-        elif self.active_tool == Tool.WATER and tile == self.world.Tile.TILLED_SOIL:
-            self.world.set_tile(target_x, target_y, self.world.Tile.WATERED_SOIL)
-        # Add more tool interactions here later
+        if tile is None:
+            return False
+            
+        tool_used = False
+        if self.selected_tool == Tool.HOE:
+            if tile == self.world.Tile.SOIL:
+                self.world.set_tile(grid_x, grid_y, self.world.Tile.TILLED_SOIL)
+                tool_used = True
+                
+        elif self.selected_tool == Tool.WATER:
+            tool_used = self.world.water_tile(grid_x, grid_y)
+                
+        elif self.selected_tool == Tool.SEED:
+            # Find seeds in inventory
+            for item in self.inventory:
+                if "_SEEDS" in item.item_type.id:
+                    if item.quantity > 0 and self.world.plant_seed(grid_x, grid_y, item.item_type):
+                        item.remove(1)
+                        tool_used = True
+                    break
+                    
+        elif self.selected_tool == Tool.HARVEST:
+            harvested = self.world.harvest_plant(grid_x, grid_y)
+            if harvested:
+                # Convert seed type to produce type
+                produce_id = harvested.item_type.id.replace("_SEEDS", "")
+                produce_type = getattr(Items, produce_id)
+                
+                # Find existing stack or create new one
+                for item in self.inventory:
+                    if item.item_type == produce_type:
+                        item.add(1)
+                        break
+                else:
+                    self.inventory.append(ItemStack(produce_type, 1))
+                tool_used = True
+        
+        if tool_used:
+            # Start tool animation
+            self.is_using_tool = True
+            self.tool_start_time = pygame.time.get_ticks()
+            self.sprite.set_state(self.selected_tool, self.facing)
+            
+        return tool_used
 
     def draw(self, screen, camera_x=0, camera_y=0):
-        # Draw the player as a circle for now
-        center_x = self.screen_x + self.world.tile_size // 2 - camera_x
-        center_y = self.screen_y + self.world.tile_size // 2 - camera_y
-        pygame.draw.circle(screen, self.color, (center_x, center_y), self.size // 2)
+        # Get current sprite frame
+        current_frame = self.sprite.update(pygame.time.get_ticks())
         
-        # Draw a small line indicating facing direction
-        direction_length = 10
-        if self.facing == 'up':
-            end_y = center_y - direction_length
-            end_x = center_x
-        elif self.facing == 'down':
-            end_y = center_y + direction_length
-            end_x = center_x
-        elif self.facing == 'left':
-            end_x = center_x - direction_length
-            end_y = center_y
-        else:  # right
-            end_x = center_x + direction_length
-            end_y = center_y
-            
-        pygame.draw.line(screen, (0, 0, 0), (center_x, center_y), (end_x, end_y), 2) 
+        # Calculate screen position
+        screen_x = int(self.x - camera_x - current_frame.get_width() // 2)
+        screen_y = int(self.y - camera_y - current_frame.get_height() * 0.75)
+        
+        # Draw sprite
+        screen.blit(current_frame, (screen_x, screen_y)) 
